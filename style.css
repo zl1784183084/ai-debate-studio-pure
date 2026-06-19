@@ -113,11 +113,33 @@ body {
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
-.panel-section:last-of-type {
+.panel-section-grow {
   border-bottom: none;
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 模型列表滚动容器 */
+.model-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 4px;
+}
+.model-list::-webkit-scrollbar {
+  width: 5px;
+}
+.model-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.model-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+.model-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .section-header {
@@ -379,6 +401,34 @@ body {
   overflow: hidden;
 }
 
+/* 聊天工具栏 */
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.chat-toolbar-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.btn-export {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+.btn-export:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(74, 108, 247, 0.08);
+}
+
 .chat-container {
   flex: 1;
   overflow-y: auto;
@@ -493,6 +543,9 @@ body {
   border-radius: 4px;
   transition: all var(--transition);
 }
+.thinking-toggle.hidden {
+  display: none;
+}
 .thinking-toggle:hover {
   color: var(--text-secondary);
   background: rgba(255,255,255,0.04);
@@ -510,25 +563,26 @@ body {
   background: rgba(240, 179, 75, 0.06);
   border: 1px solid rgba(240, 179, 75, 0.2);
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 0 12px;
   margin-bottom: 8px;
   font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
-  display: none;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.25s ease, margin 0.35s ease;
 }
 .thinking-content.visible {
-  display: block;
-  animation: thinkingReveal 0.25s ease;
+  max-height: 400px;
+  padding: 10px 12px;
+  opacity: 1;
+  overflow-y: auto;
 }
-
-@keyframes thinkingReveal {
-  from { opacity: 0; max-height: 0; }
-  to   { opacity: 1; max-height: 300px; }
+.thinking-content.hidden {
+  display: none;
 }
 
 /* ---------- 流式输出光标 ---------- */

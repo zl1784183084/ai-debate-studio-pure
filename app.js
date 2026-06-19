@@ -48,6 +48,7 @@ const DOM = {
   addModelBtn: $('#addModelBtn'),
   startBtn: $('#startBtn'),
   stopBtn: $('#stopBtn'),
+  exportBtn: $('#exportBtn'),
   chatContainer: $('#chatContainer'),
   chatEmpty: $('#chatEmpty'),
   chatMessages: $('#chatMessages'),
@@ -513,10 +514,14 @@ async function speakModel(model, modelIndex) {
   try {
     await streamChat(model, messages, {
       onThinking(chunk) {
-        thinkingContent.style.display = 'block';
-        thinkingToggle.style.display = 'inline-flex';
+        // 首次收到思考内容时，自动展开
+        if (!thinkingContent.classList.contains('visible')) {
+          thinkingContent.classList.add('visible');
+          thinkingToggle.classList.add('expanded');
+          thinkingToggle.querySelector('.arrow').innerHTML = '&#9660;';
+          thinkingToggle.querySelector('.label').textContent = '思考中...';
+        }
         thinkingContent.textContent += chunk;
-        thinkingContent.classList.add('visible');
         scrollToBottom();
       },
       onContent(chunk) {
@@ -527,12 +532,16 @@ async function speakModel(model, modelIndex) {
         contentEl.classList.remove('streaming');
         messageEl.classList.remove('speaking');
 
-        // 标记思考过程完成
+        // 标记思考过程完成 — 默认折叠
         if (thinkingContent.textContent.trim()) {
+          thinkingContent.classList.remove('visible');
+          thinkingToggle.classList.remove('expanded');
+          thinkingToggle.querySelector('.arrow').innerHTML = '&#9654;';
           thinkingToggle.querySelector('.label').textContent = '思考过程';
         } else {
-          thinkingToggle.style.display = 'none';
-          thinkingContent.style.display = 'none';
+          // 无思考内容则隐藏整个区域
+          thinkingToggle.classList.add('hidden');
+          thinkingContent.classList.add('hidden');
         }
       },
       onError(err) {
@@ -704,9 +713,9 @@ function createMessageBubble(name, color, isActive) {
         <span class="message-sender" style="color:${color}">${escHtml(name)}</span>
         <span class="message-time">${formatTime()}</span>
       </div>
-      <button class="thinking-toggle" style="display:none">
+      <button class="thinking-toggle">
         <span class="arrow">&#9654;</span>
-        <span class="label">思考中...</span>
+        <span class="label">思考过程</span>
       </button>
       <div class="thinking-content"></div>
       <div class="message-content streaming">${isActive ? '<span class="cursor-blink"></span>' : ''}</div>
@@ -717,8 +726,16 @@ function createMessageBubble(name, color, isActive) {
   const toggle = bubble.querySelector('.thinking-toggle');
   const thinkingContent = bubble.querySelector('.thinking-content');
   toggle.addEventListener('click', () => {
-    thinkingContent.classList.toggle('visible');
-    toggle.classList.toggle('expanded');
+    const isOpen = !thinkingContent.classList.contains('visible');
+    if (isOpen) {
+      thinkingContent.classList.add('visible');
+      toggle.classList.add('expanded');
+      toggle.querySelector('.arrow').innerHTML = '&#9660;';
+    } else {
+      thinkingContent.classList.remove('visible');
+      toggle.classList.remove('expanded');
+      toggle.querySelector('.arrow').innerHTML = '&#9654;';
+    }
   });
 
   return bubble;
@@ -769,6 +786,52 @@ function scrollToBottom() {
   DOM.chatContainer.scrollTop = DOM.chatContainer.scrollHeight;
 }
 
+/** 导出对话为文本文件 */
+function exportDebate() {
+  if (state.history.length === 0) {
+    showToast('尚无发言记录可导出', 'error');
+    return;
+  }
+
+  const topic = state.topic.trim() || '未命名主题';
+  const safeTopic = topic.replace(/[\\/:*?"<>|]/g, '_').substring(0, 50);
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+  const filename = `debate-${safeTopic}-${ts}.txt`;
+
+  const sep = '='.repeat(60);
+  let text = `${sep}\n`;
+  text += `  AI Debate Studio - 对话导出\n`;
+  text += `  主题: ${topic}\n`;
+  text += `  导出时间: ${now.toLocaleString('zh-CN')}\n`;
+  text += `  总发言数: ${state.history.length}\n`;
+  text += `${sep}\n\n`;
+
+  state.history.forEach((h, i) => {
+    text += `【发言 #${i + 1}】${h.modelName}  —  ${h.timestamp}\n`;
+    text += `${'-'.repeat(50)}\n`;
+
+    if (h.thinking && h.thinking.trim()) {
+      text += `[思考过程]\n${h.thinking.trim()}\n\n`;
+    }
+
+    text += `[发言内容]\n${h.content.trim()}\n\n`;
+    text += `${sep}\n\n`;
+  });
+
+  const blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`已导出: ${filename}`, 'success');
+}
+
 // ---------- 全局事件绑定 ----------
 
 /** 初始化所有事件监听 */
@@ -797,6 +860,9 @@ function initEvents() {
     }
   });
   DOM.stopBtn.addEventListener('click', stopDebate);
+
+  // 导出对话
+  DOM.exportBtn.addEventListener('click', exportDebate);
 
   // 快捷键：Ctrl+Enter 开始，Escape 停止
   document.addEventListener('keydown', (e) => {

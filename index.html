@@ -34,7 +34,7 @@
       </div>
 
       <!-- 模型配置区 -->
-      <div class="panel-section">
+      <div class="panel-section panel-section-grow">
         <div class="section-header">
           <h2 class="section-title">模型配置</h2>
           <button class="btn btn-sm btn-add" id="addModelBtn" title="添加模型">+ 添加</button>
@@ -53,6 +53,10 @@
 
     <!-- 右侧主区域：发言历史 -->
     <main class="main-area">
+      <div class="chat-toolbar">
+        <span class="chat-toolbar-title">发言记录</span>
+        <button class="btn btn-sm btn-export" id="exportBtn" title="导出对话为文本文件">导出对话</button>
+      </div>
       <div class="chat-container" id="chatContainer">
         <div class="chat-empty" id="chatEmpty">
           <div class="empty-icon">&#9678;</div>
