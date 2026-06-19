@@ -7,7 +7,8 @@ const LS_KEYS = {
   models: 'debate_models',
   topic: 'debate_topic',
   rounds: 'debate_rounds',
-  corsProxy: 'debate_cors_proxy'
+  corsProxy: 'debate_cors_proxy',
+  sidebarCollapsed: 'debate_sidebar_collapsed'
 };
 
 // 模型颜色调色板（循环分配）
@@ -35,7 +36,9 @@ let state = {
   activeThinkingEl: null,
   expandedCards: new Set(), // 展开了详情的模型卡片索引集合
   historyRecords: [],    // 辩论历史记录（内存，刷新消失）
-  historyExpanded: false // 历史记录区域是否展开
+  historyExpanded: false, // 历史记录区域是否展开
+  sidebarCollapsed: false, // 侧栏是否折叠
+  pendingStopRecordId: null // 暂停时保存的历史记录 ID，继续时清除避免重复
 };
 
 // ---------- DOM 引用 ----------
@@ -65,7 +68,9 @@ const DOM = {
   historyToggle: $('#historyToggle'),
   historyList: $('#historyList'),
   historyCount: $('#historyCount'),
-  clearHistoryBtn: $('#clearHistoryBtn')
+  clearHistoryBtn: $('#clearHistoryBtn'),
+  sidebar: $('#sidebar'),
+  sidebarCollapseBtn: $('#sidebarCollapseBtn')
 };
 
 // ---------- 工具函数 ----------
@@ -447,24 +452,34 @@ function validateConfig() {
 async function startDebate() {
   if (!validateConfig()) return;
 
-  // 重置状态
+  const isResuming = state.debateState === DEBATE_STATE.STOPPED && state.history.length > 0;
+
   state.debateState = DEBATE_STATE.RUNNING;
-  state.currentModelIndex = 0;
-  state.currentRound = 1;
-  state.history = [];
   state.abortController = new AbortController();
   state.activeMessageEl = null;
   state.activeThinkingEl = null;
 
-  // 清空聊天区
-  DOM.chatMessages.innerHTML = '';
-  DOM.chatEmpty.style.display = 'none';
+  if (isResuming) {
+    // 从暂停处继续：不清空消息，计算当前轮数和发言人索引
+    if (state.pendingStopRecordId) {
+      state.historyRecords = state.historyRecords.filter(r => r.id !== state.pendingStopRecordId);
+      state.pendingStopRecordId = null;
+    }
+    const totalSpeakers = state.history.length;
+    state.currentModelIndex = totalSpeakers % state.models.length;
+    state.currentRound = Math.floor(totalSpeakers / state.models.length) + 1;
+    DOM.chatEmpty.style.display = 'none';
+  } else {
+    // 全新开始
+    state.currentModelIndex = 0;
+    state.currentRound = 1;
+    state.history = [];
+    DOM.chatMessages.innerHTML = '';
+    DOM.chatEmpty.style.display = 'none';
+  }
 
-  // 更新 UI
   updateUIState();
   updateStatusBar();
-
-  // 启动发言循环
   await debateLoop();
 }
 
@@ -698,9 +713,10 @@ function stopDebate() {
     state.abortController.abort();
     state.abortController = null;
   }
-  // 如果有发言历史则保存记录
+  // 如果有发言历史则保存记录（记录 ID 将在继续时清除，避免重复）
   if (state.history.length > 0) {
     saveDebateRecord();
+    state.pendingStopRecordId = state.historyRecords[0] ? state.historyRecords[0].id : null;
   }
   updateUIState();
   updateStatusBar();
@@ -710,6 +726,7 @@ function stopDebate() {
 function finishDebate(reason) {
   state.debateState = DEBATE_STATE.IDLE;
   state.abortController = null;
+  state.pendingStopRecordId = null;
   saveDebateRecord();
   updateUIState();
   updateStatusBar();
@@ -771,6 +788,13 @@ function updateUIState() {
   DOM.addModelBtn.disabled = running;
   DOM.newDebateBtn.disabled = false; // 新建辩论始终可用
 
+  // 暂停状态下按钮文字改为"继续辩论"
+  if (state.debateState === DEBATE_STATE.STOPPED && state.history.length > 0) {
+    DOM.startBtn.textContent = '继续辩论';
+  } else {
+    DOM.startBtn.textContent = '开始辩论';
+  }
+
   // 更新状态指示器
   DOM.statusIndicator.className = 'status-indicator';
   if (running) {
@@ -794,7 +818,15 @@ function updateStatusBar() {
       : `第 ${state.currentRound} 轮 (无限)`;
     DOM.statusRounds.textContent = roundInfo;
   } else if (state.debateState === DEBATE_STATE.STOPPED) {
-    DOM.statusText.textContent = '已停止';
+    DOM.statusText.textContent = '已暂停';
+    // 显示暂停时的进度信息
+    if (state.history.length > 0) {
+      const completedRounds = Math.floor(state.history.length / state.models.length);
+      const totalRounds = state.rounds > 0 ? state.rounds : '∞';
+      DOM.statusRounds.textContent = `已完成 ${completedRounds} 轮 / 共 ${totalRounds} 轮`;
+    } else {
+      DOM.statusRounds.textContent = '';
+    }
   }
 }
 
@@ -1054,6 +1086,7 @@ function newDebate() {
   state.history = [];
   state.activeMessageEl = null;
   state.activeThinkingEl = null;
+  state.pendingStopRecordId = null;
   // 主题保留不清空
   // 模型配置保留不清空
   // 轮数重置为当前输入框的值
@@ -1212,6 +1245,55 @@ function toggleHistory() {
   }
 }
 
+/** 判断当前是否为移动端布局 */
+function isMobileLayout() {
+  return window.innerWidth <= 900;
+}
+
+/** 切换侧栏折叠/展开 */
+function toggleSidebar() {
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  updateSidebarUI();
+  saveSidebarState();
+}
+
+/** 更新侧栏 UI 以匹配折叠状态 */
+function updateSidebarUI() {
+  const mobile = isMobileLayout();
+
+  if (state.sidebarCollapsed) {
+    DOM.sidebar.classList.add('collapsed');
+    // 桌面端折叠后向右展开，移动端折叠后向下展开
+    DOM.sidebarCollapseBtn.innerHTML = mobile ? '&#9660;' : '&#9654;';
+    DOM.sidebarCollapseBtn.title = '展开侧栏';
+  } else {
+    DOM.sidebar.classList.remove('collapsed');
+    // 桌面端未折叠向左收起，移动端未折叠向上收起
+    DOM.sidebarCollapseBtn.innerHTML = mobile ? '&#9650;' : '&#9664;';
+    DOM.sidebarCollapseBtn.title = '折叠侧栏';
+  }
+}
+
+/** 保存侧栏折叠状态到 localStorage */
+function saveSidebarState() {
+  try {
+    localStorage.setItem(LS_KEYS.sidebarCollapsed, state.sidebarCollapsed ? '1' : '0');
+  } catch (e) {
+    console.warn('localStorage 写入侧栏状态失败:', e);
+  }
+}
+
+/** 从 localStorage 加载侧栏折叠状态 */
+function loadSidebarState() {
+  try {
+    const val = localStorage.getItem(LS_KEYS.sidebarCollapsed);
+    state.sidebarCollapsed = val === '1';
+  } catch (e) {
+    state.sidebarCollapsed = false;
+  }
+  updateSidebarUI();
+}
+
 // ---------- 全局事件绑定 ----------
 
 /** 初始化所有事件监听 */
@@ -1235,7 +1317,7 @@ function initEvents() {
 
   // 开始/停止
   DOM.startBtn.addEventListener('click', () => {
-    if (state.debateState === DEBATE_STATE.IDLE) {
+    if (state.debateState === DEBATE_STATE.IDLE || state.debateState === DEBATE_STATE.STOPPED) {
       startDebate();
     }
   });
@@ -1283,7 +1365,7 @@ function initEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 'Enter') {
       e.preventDefault();
-      if (state.debateState === DEBATE_STATE.IDLE) {
+      if (state.debateState === DEBATE_STATE.IDLE || state.debateState === DEBATE_STATE.STOPPED) {
         startDebate();
       }
     }
@@ -1293,11 +1375,20 @@ function initEvents() {
       }
     }
   });
+
+  // 侧栏折叠/展开
+  DOM.sidebarCollapseBtn.addEventListener('click', toggleSidebar);
+
+  // 窗口尺寸变化时更新折叠按钮箭头方向（旋转屏幕等场景）
+  window.addEventListener('resize', () => {
+    updateSidebarUI();
+  });
 }
 
 // ---------- 初始化 ----------
 function init() {
   loadConfig();
+  loadSidebarState();
   // 恢复 UI
   DOM.topicInput.value = state.topic;
   DOM.roundsInput.value = state.rounds;

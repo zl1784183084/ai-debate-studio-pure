@@ -83,12 +83,79 @@ body {
   flex-direction: column;
   overflow: hidden;
   z-index: 10;
+  transition: width 0.3s ease, min-width 0.3s ease;
+}
+
+/* 折叠状态 */
+.sidebar.collapsed {
+  width: 64px;
+  min-width: 64px;
+}
+
+.sidebar.collapsed .sidebar-header-text,
+.sidebar.collapsed .panel-section,
+.sidebar.collapsed .panel-section-grow,
+.sidebar.collapsed .panel-section-history {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding: 10px 8px;
+  border-bottom: none;
+}
+
+.sidebar.collapsed .sidebar-header-row {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-collapse-btn {
+  font-size: 1rem;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 8px 6px;
+}
+
+.sidebar.collapsed .btn-start,
+.sidebar.collapsed .btn-stop {
+  font-size: 0.7rem;
+  padding: 6px 4px;
+  border-radius: 4px;
 }
 
 .sidebar-header {
   padding: 20px 20px 12px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+.sidebar-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.sidebar-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-collapse-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all var(--transition);
+}
+.sidebar-collapse-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
 
 .app-title {
@@ -824,10 +891,73 @@ body {
     min-width: 100%;
     max-height: 55vh;
     overflow-y: auto;
+    transition: max-height 0.3s ease;
   }
   .main-area {
     flex: 1;
     min-height: 45vh;
+  }
+
+  /* 移动端折叠：侧栏收起为窄条，header+footer 横向并排 */
+  .sidebar.collapsed {
+    width: 100%;
+    min-width: 100%;
+    max-height: 52px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .sidebar.collapsed .sidebar-header {
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    flex: 0 0 auto;
+    border-bottom: none;
+  }
+
+  .sidebar.collapsed .sidebar-header-row {
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+  }
+
+  .sidebar.collapsed .sidebar-collapse-btn {
+    position: static;
+    margin-left: 0;
+    font-size: 1.2rem;
+    padding: 10px 14px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+  }
+  .sidebar.collapsed .sidebar-collapse-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+
+  .sidebar.collapsed .sidebar-footer {
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    flex: 1;
+    align-items: center;
+    border-top: none;
+  }
+
+  .sidebar.collapsed .btn-start,
+  .sidebar.collapsed .btn-stop {
+    flex: 1;
+    font-size: 0.72rem;
+    padding: 6px 8px;
+    margin-top: 0;
   }
 
   /* 紧凑面板间距 */
