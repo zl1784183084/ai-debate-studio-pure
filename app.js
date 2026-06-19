@@ -33,7 +33,9 @@ let state = {
   history: [],           // 发言历史 [{modelIndex, modelName, color, content, thinking, timestamp}]
   activeMessageEl: null, // 当前正在流式输出的消息 DOM 元素
   activeThinkingEl: null,
-  expandedCards: new Set() // 展开了详情的模型卡片索引集合
+  expandedCards: new Set(), // 展开了详情的模型卡片索引集合
+  historyRecords: [],    // 辩论历史记录（内存，刷新消失）
+  historyExpanded: false // 历史记录区域是否展开
 };
 
 // ---------- DOM 引用 ----------
@@ -49,12 +51,21 @@ const DOM = {
   startBtn: $('#startBtn'),
   stopBtn: $('#stopBtn'),
   exportBtn: $('#exportBtn'),
+  exportConfigBtn: $('#exportConfigBtn'),
+  importConfigBtn: $('#importConfigBtn'),
+  importConfigFile: $('#importConfigFile'),
+  newDebateBtn: $('#newDebateBtn'),
   chatContainer: $('#chatContainer'),
   chatEmpty: $('#chatEmpty'),
   chatMessages: $('#chatMessages'),
   statusIndicator: $('#statusIndicator'),
   statusText: $('#statusText'),
-  statusRounds: $('#statusRounds')
+  statusRounds: $('#statusRounds'),
+  historySection: $('#historySection'),
+  historyToggle: $('#historyToggle'),
+  historyList: $('#historyList'),
+  historyCount: $('#historyCount'),
+  clearHistoryBtn: $('#clearHistoryBtn')
 };
 
 // ---------- 工具函数 ----------
@@ -687,6 +698,10 @@ function stopDebate() {
     state.abortController.abort();
     state.abortController = null;
   }
+  // 如果有发言历史则保存记录
+  if (state.history.length > 0) {
+    saveDebateRecord();
+  }
   updateUIState();
   updateStatusBar();
 }
@@ -695,6 +710,7 @@ function stopDebate() {
 function finishDebate(reason) {
   state.debateState = DEBATE_STATE.IDLE;
   state.abortController = null;
+  saveDebateRecord();
   updateUIState();
   updateStatusBar();
   showToast(reason, 'success');
@@ -753,6 +769,7 @@ function updateUIState() {
   DOM.roundsInput.disabled = running;
   DOM.corsProxyInput.disabled = running;
   DOM.addModelBtn.disabled = running;
+  DOM.newDebateBtn.disabled = false; // 新建辩论始终可用
 
   // 更新状态指示器
   DOM.statusIndicator.className = 'status-indicator';
@@ -832,6 +849,374 @@ function exportDebate() {
   showToast(`已导出: ${filename}`, 'success');
 }
 
+// ---------- 配置导出/导入 ----------
+
+/** 导出配置为纯文本文档 */
+function exportConfig() {
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+  const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+  let text = '=== AI Debate Studio 配置文件 ===\n';
+  text += '版本: 1.0\n';
+  text += `导出时间: ${timeStr}\n\n`;
+  text += '[全局设置]\n';
+  text += `辩论主题: ${state.topic}\n`;
+  text += `发言轮数: ${state.rounds}\n`;
+  text += `CORS代理: ${state.corsProxy}\n`;
+
+  state.models.forEach((m, i) => {
+    text += '\n' + '='.repeat(40) + '\n';
+    text += `[模型 ${i + 1}]\n`;
+    text += `名称: ${m.name}\n`;
+    text += `API类型: ${m.apiType === 'openai' ? 'OpenAI' : 'DeepSeek'}\n`;
+    text += `Base URL: ${m.baseUrl}\n`;
+    text += `模型名: ${m.modelName}\n`;
+    text += `API Key: ${m.apiKey}\n`;
+    if (m.systemPrompt && m.systemPrompt.trim()) {
+      // 系统提示词可能跨行，用双引号包裹并保留原始换行
+      text += `系统提示词: "${m.systemPrompt}"\n`;
+    } else {
+      text += '系统提示词: \n';
+    }
+  });
+
+  const filename = `debate-config-${ts}.txt`;
+  const blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`配置已导出: ${filename}`, 'success');
+}
+
+/** 触发导入配置文件选择器 */
+function importConfig() {
+  DOM.importConfigFile.click();
+}
+
+/** 处理导入配置文件（纯文本格式） */
+function handleImportFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const text = evt.target.result;
+      const lines = text.split(/\r?\n/);
+
+      const result = {
+        topic: '',
+        rounds: 3,
+        corsProxy: '',
+        models: []
+      };
+
+      let currentSection = null; // 'global' | modelIndex
+      let currentModel = null;
+      let pendingKey = null;     // 上一行是 "系统提示词:" 且值跨行
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // 跳过空行和分隔线（= 组成）
+        if (!trimmed || /^={3,}$/.test(trimmed)) continue;
+
+        // 跳过文件头部（版本/导出时间等元信息直到遇到 [全局设置]）
+        if (!currentSection && !trimmed.startsWith('[')) continue;
+
+        // 段落切换
+        if (trimmed === '[全局设置]') {
+          currentSection = 'global';
+          currentModel = null;
+          pendingKey = null;
+          continue;
+        }
+
+        const modelMatch = trimmed.match(/^\[模型\s+(\d+)\]$/);
+        if (modelMatch) {
+          // 保存上一个模型
+          if (currentModel && currentSection === 'model') {
+            result.models.push(currentModel);
+          }
+          currentSection = 'model';
+          currentModel = {
+            name: '',
+            apiType: 'deepseek',
+            apiKey: '',
+            baseUrl: '',
+            modelName: '',
+            systemPrompt: ''
+          };
+          pendingKey = null;
+          continue;
+        }
+
+        // 解析键值对
+        const kvMatch = trimmed.match(/^(.+?)\s*:\s*(.*)$/);
+        if (!kvMatch) {
+          // 可能是跨行的系统提示词续行
+          if (pendingKey === 'systemPrompt' && currentModel) {
+            currentModel.systemPrompt += '\n' + trimmed;
+          }
+          continue;
+        }
+
+        const key = kvMatch[1].trim();
+        let value = kvMatch[2];
+
+        // 系统提示词特殊处理：去掉首尾引号
+        if (key === '系统提示词') {
+          const quoted = value.match(/^"(.*)"$/s);
+          if (quoted) {
+            value = quoted[1];
+          }
+        }
+
+        if (currentSection === 'global') {
+          if (key === '辩论主题') result.topic = value;
+          else if (key === '发言轮数') result.rounds = parseInt(value, 10) || 0;
+          else if (key === 'CORS代理') result.corsProxy = value;
+        } else if (currentSection === 'model' && currentModel) {
+          if (key === '名称') currentModel.name = value;
+          else if (key === 'API类型') {
+            currentModel.apiType = value.toLowerCase() === 'openai' ? 'openai' : 'deepseek';
+          }
+          else if (key === 'Base URL') currentModel.baseUrl = value;
+          else if (key === '模型名') currentModel.modelName = value;
+          else if (key === 'API Key') currentModel.apiKey = value;
+          else if (key === '系统提示词') {
+            currentModel.systemPrompt = value;
+            pendingKey = 'systemPrompt';
+            continue; // 不重置 pendingKey
+          }
+        }
+        pendingKey = null;
+      }
+
+      // 保存最后一个模型
+      if (currentModel && currentSection === 'model') {
+        result.models.push(currentModel);
+      }
+
+      // 校验
+      if (result.models.length === 0) {
+        throw new Error('配置文件中未找到任何模型定义');
+      }
+
+      // 覆盖当前配置
+      state.topic = result.topic;
+      state.rounds = result.rounds;
+      state.corsProxy = result.corsProxy;
+      state.models = result.models;
+
+      // 刷新 UI
+      DOM.topicInput.value = state.topic;
+      DOM.roundsInput.value = state.rounds;
+      DOM.corsProxyInput.value = state.corsProxy;
+      state.expandedCards.clear();
+      renderModelList();
+      saveConfig();
+      showToast('配置导入成功', 'success');
+    } catch (err) {
+      showToast(`导入失败: ${err.message}`, 'error');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+
+  // 重置文件选择器以允许重复导入同一文件
+  DOM.importConfigFile.value = '';
+}
+
+// ---------- 新建辩论 ----------
+
+/** 新建辩论：清空发言、重置状态 */
+function newDebate() {
+  if (state.debateState === DEBATE_STATE.RUNNING) {
+    // 先设状态为 STOPPED，防止 debateLoop 误调 finishDebate
+    state.debateState = DEBATE_STATE.STOPPED;
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+  }
+
+  state.debateState = DEBATE_STATE.IDLE;
+  state.currentModelIndex = 0;
+  state.currentRound = 0;
+  state.history = [];
+  state.activeMessageEl = null;
+  state.activeThinkingEl = null;
+  // 主题保留不清空
+  // 模型配置保留不清空
+  // 轮数重置为当前输入框的值
+  state.rounds = parseInt(DOM.roundsInput.value, 10) || 0;
+  saveConfig();
+
+  // 清空聊天区
+  DOM.chatMessages.innerHTML = '';
+  DOM.chatEmpty.style.display = '';
+
+  updateUIState();
+  updateStatusBar();
+  showToast('已新建辩论，当前发言已清除', 'success');
+}
+
+// ---------- 辩论历史记录 ----------
+
+/** 保存当前辩论到历史记录（内存） */
+function saveDebateRecord() {
+  if (state.history.length === 0) return;
+
+  const record = {
+    id: Date.now(),
+    topic: state.topic || '未命名主题',
+    startTime: new Date().toISOString(),
+    modelsSummary: state.models.map(m => m.name || '未命名').join(', '),
+    messageCount: state.history.length,
+    // 深拷贝历史数据以便恢复
+    messages: state.history.map(h => ({
+      modelIndex: h.modelIndex,
+      modelName: h.modelName,
+      color: h.color,
+      content: h.content,
+      thinking: h.thinking,
+      timestamp: h.timestamp
+    }))
+  };
+
+  state.historyRecords.unshift(record);
+
+  // 最多保留 20 条
+  if (state.historyRecords.length > 20) {
+    state.historyRecords = state.historyRecords.slice(0, 20);
+  }
+
+  renderHistoryList();
+}
+
+/** 渲染历史记录列表 */
+function renderHistoryList() {
+  const count = state.historyRecords.length;
+  DOM.historyCount.textContent = count;
+  DOM.clearHistoryBtn.style.display = count > 0 ? 'block' : 'none';
+
+  if (count === 0) {
+    DOM.historyList.innerHTML = '<div class="history-empty">暂无历史记录（刷新后消失）</div>';
+    return;
+  }
+
+  DOM.historyList.innerHTML = state.historyRecords.map(r => {
+    const time = new Date(r.startTime);
+    const timeStr = `${String(time.getMonth()+1).padStart(2,'0')}-${String(time.getDate()).padStart(2,'0')} ${String(time.getHours()).padStart(2,'0')}:${String(time.getMinutes()).padStart(2,'0')}`;
+    return `
+      <div class="history-item" data-id="${r.id}">
+        <div class="history-item-info">
+          <div class="history-item-topic">${escHtml(r.topic)}</div>
+          <div class="history-item-meta">
+            <span>${timeStr}</span>
+            <span>${r.messageCount} 条发言</span>
+          </div>
+        </div>
+        <button class="history-item-del" data-id="${r.id}" title="删除">&times;</button>
+      </div>`;
+  }).join('');
+
+  // 绑定事件
+  DOM.historyList.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      // 如果点击的是删除按钮则不触发
+      if (e.target.closest('.history-item-del')) return;
+      const id = parseInt(item.dataset.id, 10);
+      restoreHistoryRecord(id);
+    });
+  });
+
+  DOM.historyList.querySelectorAll('.history-item-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.id, 10);
+      deleteHistoryRecord(id);
+    });
+  });
+}
+
+/** 恢复历史记录到主区域查看 */
+function restoreHistoryRecord(id) {
+  const record = state.historyRecords.find(r => r.id === id);
+  if (!record) return;
+
+  // 恢复发言历史到 state（仅用于显示，不影响运行状态）
+  state.history = record.messages.map(m => ({
+    modelIndex: m.modelIndex,
+    modelName: m.modelName,
+    color: m.color,
+    content: m.content,
+    thinking: m.thinking,
+    timestamp: m.timestamp
+  }));
+
+  // 渲染到聊天区
+  DOM.chatMessages.innerHTML = '';
+  DOM.chatEmpty.style.display = 'none';
+
+  state.history.forEach(h => {
+    const bubble = createMessageBubble(h.modelName, h.color, false);
+    const contentEl = bubble.querySelector('.message-content');
+    const thinkingToggle = bubble.querySelector('.thinking-toggle');
+    const thinkingContent = bubble.querySelector('.thinking-content');
+
+    contentEl.textContent = h.content;
+    contentEl.classList.remove('streaming');
+
+    if (h.thinking && h.thinking.trim()) {
+      thinkingContent.textContent = h.thinking;
+      // 默认折叠
+    } else {
+      thinkingToggle.classList.add('hidden');
+      thinkingContent.classList.add('hidden');
+    }
+
+    DOM.chatMessages.appendChild(bubble);
+  });
+
+  scrollToBottom();
+  showToast(`已恢复查看: ${escHtml(record.topic)}`);
+}
+
+/** 删除单条历史记录 */
+function deleteHistoryRecord(id) {
+  state.historyRecords = state.historyRecords.filter(r => r.id !== id);
+  renderHistoryList();
+}
+
+/** 清空全部历史记录 */
+function clearAllHistory() {
+  if (state.historyRecords.length === 0) return;
+  state.historyRecords = [];
+  renderHistoryList();
+  showToast('历史记录已清空');
+}
+
+/** 切换历史记录区域展开/折叠 */
+function toggleHistory() {
+  state.historyExpanded = !state.historyExpanded;
+  if (state.historyExpanded) {
+    DOM.historySection.classList.add('expanded');
+    DOM.historyToggle.classList.add('expanded');
+  } else {
+    DOM.historySection.classList.remove('expanded');
+    DOM.historyToggle.classList.remove('expanded');
+  }
+}
+
 // ---------- 全局事件绑定 ----------
 
 /** 初始化所有事件监听 */
@@ -863,6 +1248,41 @@ function initEvents() {
 
   // 导出对话
   DOM.exportBtn.addEventListener('click', exportDebate);
+
+  // 导出配置（确认对话框含隐私提醒）
+  DOM.exportConfigBtn.addEventListener('click', () => {
+    if (confirm('即将导出配置为 TXT 文件。\n\n⚠️ 注意：导出的文件包含所有模型的 API Key，请妥善保管，不要分享给他人。\n\n确定导出？')) {
+      exportConfig();
+    }
+  });
+
+  // 导入配置
+  DOM.importConfigBtn.addEventListener('click', () => {
+    if (confirm('将导入并覆盖当前全部配置（含API Key）。确定继续？')) {
+      importConfig();
+    }
+  });
+  DOM.importConfigFile.addEventListener('change', handleImportFile);
+
+  // 新建辩论
+  DOM.newDebateBtn.addEventListener('click', () => {
+    if (state.debateState === DEBATE_STATE.RUNNING) {
+      if (!confirm('当前正在进行辩论，新建将中断并清除所有发言记录。\n\n确定新建？')) return;
+    } else if (state.history.length > 0) {
+      if (!confirm('新建辩论将清除当前发言记录。\n\n确定新建？')) return;
+    }
+    newDebate();
+  });
+
+  // 历史记录展开/折叠
+  DOM.historyToggle.addEventListener('click', toggleHistory);
+
+  // 清空全部历史
+  DOM.clearHistoryBtn.addEventListener('click', () => {
+    if (confirm('确定清空全部历史记录？')) {
+      clearAllHistory();
+    }
+  });
 
   // 快捷键：Ctrl+Enter 开始，Escape 停止
   document.addEventListener('keydown', (e) => {

@@ -261,11 +261,179 @@ body {
   font-size: 0.9rem;
 }
 
+/* ---------- 配置导入/导出 ---------- */
+.config-io-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-io {
+  flex: 1;
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+.btn-io:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(74, 108, 247, 0.08);
+}
+
+.btn-new-debate {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.btn-new-debate:hover {
+  background: rgba(240, 179, 75, 0.12);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 /* ---------- 侧栏底部 ---------- */
 .sidebar-footer {
   padding: 14px 20px;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+/* ---------- 历史记录区域 ---------- */
+.panel-section-history {
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow: hidden;
+}
+
+.history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: inherit;
+  padding: 0;
+  margin-bottom: 0;
+  text-align: left;
+}
+.history-toggle:hover {
+  color: var(--text-primary);
+}
+.history-toggle-arrow {
+  font-size: 0.6rem;
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+.history-toggle.expanded .history-toggle-arrow {
+  transform: rotate(90deg);
+}
+
+.history-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.history-list {
+  display: none;
+  overflow-y: auto;
+  max-height: 0;
+  transition: max-height 0.3s ease;
+  margin-top: 6px;
+}
+.panel-section-history.expanded .history-list {
+  display: block;
+  max-height: 180px;
+}
+
+.history-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+  background: var(--bg-card);
+}
+.history-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+}
+
+.history-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-item-topic {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.history-item-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+}
+
+.history-item-del {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all var(--transition);
+}
+.history-item-del:hover {
+  color: var(--danger);
+  background: rgba(224, 85, 106, 0.15);
+}
+
+.btn-clear-history {
+  width: 100%;
+  margin-top: 8px;
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+.btn-clear-history:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(224, 85, 106, 0.08);
 }
 
 /* ---------- 模型卡片 ---------- */
