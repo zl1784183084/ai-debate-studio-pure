@@ -1094,11 +1094,6 @@ function saveDebateRecord() {
 
   state.historyRecords.unshift(record);
 
-  // 最多保留 20 条
-  if (state.historyRecords.length > 20) {
-    state.historyRecords = state.historyRecords.slice(0, 20);
-  }
-
   renderHistoryList();
 }
 

@@ -823,9 +823,55 @@ body {
     width: 100%;
     min-width: 100%;
     max-height: 55vh;
+    overflow-y: auto;
   }
   .main-area {
-    height: 45vh;
+    flex: 1;
+    min-height: 45vh;
+  }
+
+  /* 紧凑面板间距 */
+  .sidebar-header {
+    padding: 12px 14px;
+  }
+  .panel-section {
+    padding: 10px 14px;
+  }
+  .sidebar-footer {
+    padding: 10px 14px;
+  }
+
+  /* 关键：模型配置区域防止 flex 压缩到零 */
+  .panel-section-grow {
+    flex-shrink: 0;
+    min-height: 220px;
+  }
+
+  /* 模型卡片头触屏优化 */
+  .model-card-header {
+    touch-action: manipulation;
+    min-height: 40px;
+  }
+
+  /* 展开/折叠按钮增大触屏点击区域 */
+  .toggle-card {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* 全局设置区紧凑化 */
+  .form-group {
+    margin-bottom: 8px;
+  }
+  .form-group label {
+    font-size: 0.72rem;
+  }
+  .form-group input[type="text"],
+  .form-group input[type="number"],
+  .form-group textarea,
+  .form-group input[type="password"] {
+    padding: 6px 8px;
+    font-size: 0.8rem;
   }
 }
 
