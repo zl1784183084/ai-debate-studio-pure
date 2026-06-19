@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Debate Studio - 多模型AI辩论/协作平台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 左侧面板：模型配置区 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="app-title">AI Debate Studio</h1>
+        <p class="app-subtitle">多模型辩论 / 协作</p>
+      </div>
+
+      <!-- 全局设置 -->
+      <div class="panel-section">
+        <h2 class="section-title">全局设置</h2>
+        <div class="form-group">
+          <label for="topicInput">辩论 / 协作主题</label>
+          <textarea id="topicInput" rows="3" placeholder="输入主题，所有AI可见..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="roundsInput">轮数（0 或留空 = 无限轮）</label>
+          <input type="number" id="roundsInput" min="0" value="3" placeholder="轮数">
+        </div>
+        <div class="form-group">
+          <label for="corsProxyInput">CORS 代理（可选，留空直连）</label>
+          <input type="text" id="corsProxyInput" placeholder="例如: https://your-cors-proxy.com/">
+          <span class="form-hint">API 不支持浏览器跨域时可填写代理地址</span>
+        </div>
+      </div>
+
+      <!-- 模型配置区 -->
+      <div class="panel-section">
+        <div class="section-header">
+          <h2 class="section-title">模型配置</h2>
+          <button class="btn btn-sm btn-add" id="addModelBtn" title="添加模型">+ 添加</button>
+        </div>
+        <div class="model-list" id="modelList">
+          <!-- 模型卡片由 JS 动态渲染 -->
+        </div>
+      </div>
+
+      <!-- 控制按钮 -->
+      <div class="sidebar-footer">
+        <button class="btn btn-primary btn-start" id="startBtn">开始辩论</button>
+        <button class="btn btn-danger btn-stop" id="stopBtn" disabled>停止</button>
+      </div>
+    </aside>
+
+    <!-- 右侧主区域：发言历史 -->
+    <main class="main-area">
+      <div class="chat-container" id="chatContainer">
+        <div class="chat-empty" id="chatEmpty">
+          <div class="empty-icon">&#9678;</div>
+          <p>配置模型并设置主题，点击「开始辩论」启动</p>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+      </div>
+
+      <!-- 底部状态栏 -->
+      <div class="status-bar" id="statusBar">
+        <span class="status-indicator status-idle" id="statusIndicator"></span>
+        <span class="status-text" id="statusText">就绪</span>
+        <span class="status-rounds" id="statusRounds"></span>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
